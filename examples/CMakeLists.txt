@@ -4,6 +4,8 @@ add_subdirectory(HowToUseJIT)
 add_subdirectory(Kaleidoscope)
 add_subdirectory(ModuleMaker)
 
+add_subdirectory(candy_0)
+
 if(LLVM_ENABLE_EH AND (NOT WIN32) AND (NOT "${LLVM_NATIVE_ARCH}" STREQUAL "ARM"))
     add_subdirectory(ExceptionDemo)
 endif()
