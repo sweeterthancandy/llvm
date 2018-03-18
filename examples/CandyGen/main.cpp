@@ -130,10 +130,11 @@ void Expr2(){
 
 
         Function* times_two = nullptr;
+        Function* abs_ = nullptr;
 
         /*
                 double __main__(){
-                        return times_two(23.0);
+                        return abs_(23.0);
                 }
          */
         auto make_main = [&](){
@@ -147,10 +148,10 @@ void Expr2(){
 
                 IRBuilder<> Builder(TheContext);
                 std::vector<Value *> args;
-                args.push_back( ConstantFP::get(TheContext, APFloat(23.)) );
+                args.push_back( ConstantFP::get(TheContext, APFloat(-23.)) );
                 
                 Builder.SetInsertPoint(BB);
-                auto ret = Builder.CreateCall(times_two, args, "ret");
+                auto ret = Builder.CreateCall(abs_, args, "ret");
                 Builder.CreateRet(ret);
 
                 verifyFunction(*F);
@@ -165,7 +166,6 @@ void Expr2(){
                 }
          */
         auto make_times_two = [&](){
-                // create anon function prototype
                 FunctionType *FT_D_D = FunctionType::get(double_,  std::vector<Type *>{double_}, false);
 
                 Function *F = Function::Create(FT_D_D, Function::ExternalLinkage, "times_two", TheModule.get());
@@ -186,11 +186,81 @@ void Expr2(){
                 return F;
         };
 
+        /*
+                double abs_(double x){
+                        double ret;
+                        if( x < .0 ){
+                                ret = -x;
+                        } else {
+                                ret = x;
+                        }
+                        return ret;
+                }
+         */
+        auto make_abs = [&](){
+                FunctionType *FT_D_D = FunctionType::get(double_,  std::vector<Type *>{double_}, false);
+
+                Function *F = Function::Create(FT_D_D, Function::ExternalLinkage, "abs_", TheModule.get());
+
+                IRBuilder<> Builder(TheContext);
+                Value* arg0 = (Value*)F->arg_begin();
+
+                BasicBlock *BB = BasicBlock::Create(TheContext, "entry", F);
+                Builder.SetInsertPoint(BB);
+
+                BasicBlock *ThenBB = BasicBlock::Create(TheContext, "then", F);
+                BasicBlock *ElseBB = BasicBlock::Create(TheContext, "else");
+                BasicBlock *MergeBB = BasicBlock::Create(TheContext, "ifcont");
+                
+                Value* cond = Builder.CreateFCmpOGE(
+                        arg0,
+                        ConstantFP::get(TheContext, APFloat(0.)),
+                        "cond");
+
+                Builder.CreateCondBr(cond, ThenBB, ElseBB);
+
+
+
+                // Then
+                Builder.SetInsertPoint(ThenBB);
+                // do nothing
+                Builder.CreateBr(MergeBB);
+                ThenBB = Builder.GetInsertBlock();
+  
+                // Else
+                F->getBasicBlockList().push_back(ElseBB);
+                Builder.SetInsertPoint(ElseBB);
+                Value* mul = Builder.CreateFMul(
+                        arg0,
+                        ConstantFP::get(TheContext, APFloat(-1.)),
+                        "mul");
+                Builder.CreateBr(MergeBB);
+  
+                // Merge
+                F->getBasicBlockList().push_back(MergeBB);
+                Builder.SetInsertPoint(MergeBB);
+                PHINode *PN = Builder.CreatePHI(Type::getDoubleTy(TheContext), 2, "iftmp");
+
+                PN->addIncoming(arg0, ThenBB);
+                PN->addIncoming(mul, ElseBB);
+
+                Builder.CreateRet(PN);
+
+                verifyFunction(*F);
+
+                return F;
+        };
+
+        abs_ = make_abs();
+
+
+
         times_two = make_times_two();
 
         auto main_ = make_main();
 
         times_two->print(errs());
+        abs_->print(errs());
         main_->print(errs());
         
         auto H = TheJIT->addModule(std::move(TheModule));
